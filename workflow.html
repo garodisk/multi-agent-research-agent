@@ -1,0 +1,793 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>multi-agent-workflow — LangGraph Research Assistant</title>
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      background: #0f1117;
+      color: #e2e8f0;
+      min-height: 100vh;
+    }
+
+    /* ── Header ── */
+    header {
+      background: linear-gradient(135deg, #1a1f2e 0%, #252d3d 100%);
+      border-bottom: 1px solid #2d3748;
+      padding: 2.5rem 3rem;
+      display: flex;
+      align-items: center;
+      gap: 1.5rem;
+      flex-wrap: wrap;
+    }
+
+    .logo {
+      width: 52px; height: 52px;
+      background: linear-gradient(135deg, #6366f1, #8b5cf6);
+      border-radius: 14px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 1.6rem;
+      flex-shrink: 0;
+    }
+
+    .header-text h1 {
+      font-size: 1.75rem;
+      font-weight: 700;
+      color: #f1f5f9;
+      letter-spacing: -0.02em;
+    }
+    .header-text h1 span { color: #818cf8; }
+    .header-text p { color: #64748b; font-size: 0.9rem; margin-top: 0.3rem; font-family: monospace; }
+
+    .badges {
+      margin-left: auto;
+      display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center;
+    }
+    .badge {
+      background: #1e293b;
+      border: 1px solid #334155;
+      color: #94a3b8;
+      font-size: 0.73rem;
+      padding: 0.3rem 0.8rem;
+      border-radius: 999px;
+      font-weight: 500;
+      white-space: nowrap;
+    }
+    .badge.lg  { border-color: #4f46e5; color: #818cf8; }
+    .badge.tav { border-color: #0e7490; color: #22d3ee; }
+    .badge.or  { border-color: #7c3aed; color: #c4b5fd; }
+    .badge.ls  { border-color: #0f766e; color: #2dd4bf; }
+    .badge.nx  { border-color: #1d4ed8; color: #60a5fa; }
+
+    /* ── Layout ── */
+    main { max-width: 1240px; margin: 0 auto; padding: 3rem 2rem; }
+    section { margin-bottom: 4.5rem; }
+
+    h2 {
+      font-size: 1.15rem;
+      font-weight: 600;
+      color: #f1f5f9;
+      margin-bottom: 1.5rem;
+      padding-bottom: 0.75rem;
+      border-bottom: 1px solid #1e293b;
+      display: flex; align-items: center; gap: 0.6rem;
+    }
+    .dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: #6366f1;
+      display: inline-block;
+      flex-shrink: 0;
+    }
+
+    /* ── Card base ── */
+    .card {
+      background: #1a1f2e;
+      border: 1px solid #2d3748;
+      border-radius: 16px;
+    }
+
+    /* ── Diagram ── */
+    .diagram-card {
+      background: #1a1f2e;
+      border: 1px solid #2d3748;
+      border-radius: 16px;
+      padding: 2rem;
+      overflow-x: auto;
+    }
+    .mermaid { display: flex; justify-content: center; }
+
+    .callout {
+      margin-top: 1.25rem;
+      background: rgba(245,158,11,0.07);
+      border: 1px solid rgba(245,158,11,0.28);
+      border-radius: 12px;
+      padding: 1.1rem 1.4rem;
+      display: flex; gap: 0.9rem; align-items: flex-start;
+    }
+    .callout-icon { font-size: 1.3rem; flex-shrink: 0; margin-top: 0.05rem; }
+    .callout h4 { color: #fbbf24; font-size: 0.88rem; font-weight: 600; margin-bottom: 0.25rem; }
+    .callout p { color: #94a3b8; font-size: 0.83rem; line-height: 1.6; }
+    .callout code { background: rgba(255,255,255,0.08); padding: 0.1rem 0.35rem; border-radius: 4px; font-family: monospace; font-size: 0.82rem; }
+
+    /* ── Example queries table ── */
+    .table-wrap {
+      background: #1a1f2e;
+      border: 1px solid #2d3748;
+      border-radius: 16px;
+      overflow: hidden;
+    }
+    table { width: 100%; border-collapse: collapse; font-size: 0.865rem; }
+    th {
+      text-align: left;
+      padding: 0.8rem 1.1rem;
+      background: #141824;
+      color: #64748b;
+      font-weight: 600;
+      font-size: 0.72rem;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      border-bottom: 1px solid #2d3748;
+    }
+    td {
+      padding: 0.9rem 1.1rem;
+      border-bottom: 1px solid #1e293b;
+      color: #94a3b8;
+      vertical-align: top;
+    }
+    tr:last-child td { border-bottom: none; }
+    tr:hover td { background: rgba(255,255,255,0.015); }
+    td code {
+      background: rgba(255,255,255,0.07);
+      padding: 0.1rem 0.35rem;
+      border-radius: 4px;
+      font-family: monospace;
+      font-size: 0.82rem;
+      color: #e2e8f0;
+    }
+    td .query-text { color: #e2e8f0; font-weight: 500; }
+    td .note-text  { font-size: 0.78rem; color: #475569; margin-top: 0.3rem; }
+
+    /* ── Pills ── */
+    .pill {
+      display: inline-block;
+      font-size: 0.7rem;
+      padding: 0.15rem 0.55rem;
+      border-radius: 6px;
+      font-weight: 500;
+      font-family: monospace;
+      white-space: nowrap;
+    }
+    .pill.blue   { background: rgba(99,102,241,0.15); color: #818cf8; border: 1px solid rgba(99,102,241,0.25); }
+    .pill.green  { background: rgba(34,197,94,0.12);  color: #4ade80; border: 1px solid rgba(34,197,94,0.25); }
+    .pill.yellow { background: rgba(245,158,11,0.12); color: #fbbf24; border: 1px solid rgba(245,158,11,0.25); }
+    .pill.red    { background: rgba(239,68,68,0.12);  color: #f87171; border: 1px solid rgba(239,68,68,0.25); }
+    .pill.purple { background: rgba(168,85,247,0.12); color: #c084fc; border: 1px solid rgba(168,85,247,0.25); }
+
+    /* flow path for example table */
+    .flow-path { display: flex; flex-wrap: wrap; align-items: center; gap: 0.25rem; }
+    .flow-arrow { color: #334155; font-size: 0.75rem; }
+
+    /* ── Agent cards ── */
+    .agents { display: grid; grid-template-columns: repeat(auto-fit, minmax(270px, 1fr)); gap: 1.25rem; }
+
+    .agent-card {
+      background: #1a1f2e;
+      border: 1px solid #2d3748;
+      border-radius: 16px;
+      padding: 1.5rem;
+      position: relative;
+      overflow: hidden;
+      transition: border-color 0.18s, transform 0.18s;
+    }
+    .agent-card::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 3px;
+    }
+    .agent-card:hover { transform: translateY(-2px); }
+
+    .agent-card.clarity::before   { background: linear-gradient(90deg,#3b82f6,#6366f1); }
+    .agent-card.clarity:hover     { border-color: #3b82f6; }
+    .agent-card.research::before  { background: linear-gradient(90deg,#22c55e,#10b981); }
+    .agent-card.research:hover    { border-color: #22c55e; }
+    .agent-card.validator::before { background: linear-gradient(90deg,#ef4444,#f97316); }
+    .agent-card.validator:hover   { border-color: #ef4444; }
+    .agent-card.synthesis::before { background: linear-gradient(90deg,#a855f7,#d946ef); }
+    .agent-card.synthesis:hover   { border-color: #a855f7; }
+
+    .agent-name {
+      font-size: 1rem;
+      font-weight: 700;
+      color: #f1f5f9;
+      margin-bottom: 0.25rem;
+    }
+    .agent-file {
+      font-size: 0.75rem;
+      color: #475569;
+      font-family: monospace;
+      margin-bottom: 0.9rem;
+    }
+    .agent-desc {
+      font-size: 0.855rem;
+      color: #94a3b8;
+      line-height: 1.65;
+      margin-bottom: 1rem;
+    }
+    .tag-label {
+      font-size: 0.68rem;
+      color: #475569;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      margin-bottom: 0.3rem;
+      margin-top: 0.7rem;
+    }
+    .tag-row { display: flex; flex-wrap: wrap; gap: 0.35rem; }
+    .tag {
+      font-size: 0.69rem;
+      padding: 0.18rem 0.55rem;
+      border-radius: 6px;
+      font-weight: 500;
+      font-family: monospace;
+    }
+    .tag.input  { background: rgba(99,102,241,0.1);  color: #818cf8; border: 1px solid rgba(99,102,241,0.22); }
+    .tag.output { background: rgba(16,185,129,0.1);  color: #34d399; border: 1px solid rgba(16,185,129,0.22); }
+    .tag.route  { background: rgba(245,158,11,0.1);  color: #fbbf24; border: 1px solid rgba(245,158,11,0.22); }
+
+    /* ── Tools grid ── */
+    .tools-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(185px, 1fr)); gap: 1rem; }
+    .tool-card {
+      background: #1a1f2e;
+      border: 1px solid #2d3748;
+      border-radius: 12px;
+      padding: 1.25rem;
+      transition: border-color 0.15s, transform 0.15s;
+    }
+    .tool-card:hover { border-color: #4f46e5; transform: translateY(-2px); }
+    .tool-icon { font-size: 1.6rem; margin-bottom: 0.55rem; }
+    .tool-card h4 { font-size: 0.88rem; font-weight: 600; color: #f1f5f9; margin-bottom: 0.3rem; }
+    .tool-card p  { font-size: 0.78rem; color: #64748b; line-height: 1.55; }
+
+    /* ── How to Run ── */
+    .run-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 1.25rem; }
+    @media (max-width: 640px) { .run-cols { grid-template-columns: 1fr; } }
+
+    .run-card {
+      background: #1a1f2e;
+      border: 1px solid #2d3748;
+      border-radius: 16px;
+      padding: 1.5rem;
+    }
+    .run-card h3 {
+      font-size: 0.9rem;
+      font-weight: 600;
+      color: #f1f5f9;
+      margin-bottom: 1rem;
+      display: flex; align-items: center; gap: 0.5rem;
+    }
+    .run-card h3 .run-dot {
+      width: 6px; height: 6px;
+      border-radius: 50%;
+      display: inline-block;
+    }
+    .run-card.cli  h3 .run-dot { background: #22c55e; }
+    .run-card.chat h3 .run-dot { background: #60a5fa; }
+
+    pre {
+      background: #0a0d14;
+      border: 1px solid #1e293b;
+      border-radius: 10px;
+      padding: 1rem 1.2rem;
+      font-family: 'Cascadia Code', 'Fira Code', monospace;
+      font-size: 0.8rem;
+      color: #94a3b8;
+      line-height: 1.7;
+      overflow-x: auto;
+      margin-bottom: 0.75rem;
+    }
+    pre .cmd  { color: #4ade80; }
+    pre .cmt  { color: #334155; }
+    pre .url  { color: #818cf8; }
+    pre .kw   { color: #fbbf24; }
+
+    /* ── Footer ── */
+    footer {
+      text-align: center;
+      padding: 2rem;
+      color: #334155;
+      font-size: 0.78rem;
+      border-top: 1px solid #1e293b;
+      margin-top: 1rem;
+      letter-spacing: 0.04em;
+    }
+  </style>
+</head>
+<body>
+
+<!-- ═══════════════════ HEADER ═══════════════════ -->
+<header>
+  <div class="logo">&#x1F9E0;</div>
+  <div class="header-text">
+    <h1><span>multi-agent</span>-workflow</h1>
+    <p>turing-interview &middot; LangGraph Multi-Agent Research Assistant</p>
+  </div>
+  <div class="badges">
+    <span class="badge lg">LangGraph</span>
+    <span class="badge tav">Tavily</span>
+    <span class="badge or">OpenRouter</span>
+    <span class="badge ls">LangSmith</span>
+    <span class="badge nx">Next.js</span>
+  </div>
+</header>
+
+<main>
+
+  <!-- ═══════════════════ 1. AGENT FLOW ═══════════════════ -->
+  <section>
+    <h2><span class="dot"></span>Agent Flow</h2>
+    <div class="diagram-card">
+      <div class="mermaid">
+flowchart TD
+    START([User Input]) --> CA
+    CA["Clarity Agent\nChecks if query names a company\nLLM classification"]
+    CA -->|needs_clarification| INT["INTERRUPT\nPauses graph\nAsks for company name"]
+    INT -->|User clarifies| CA
+    CA -->|clear| RA
+    RA["Research Agent\nTavily live search + mock data\nconfidence_score 0-10"]
+    RA -->|confidence >= 6| SYN
+    RA -->|confidence < 6| VA
+    VA["Validator Agent\nSufficient to answer?\nIncrements attempt counter"]
+    VA -->|insufficient AND attempts < 3| RA
+    VA -->|sufficient OR attempts >= 3| SYN
+    SYN["Synthesis Agent\nFull message history\nFinal formatted response"]
+    SYN --> DONE([Response to User])
+    DONE -->|Follow-up| START
+
+    style CA  fill:#1e3a5f,stroke:#3b82f6,color:#e2e8f0
+    style RA  fill:#14532d,stroke:#22c55e,color:#e2e8f0
+    style VA  fill:#450a0a,stroke:#ef4444,color:#e2e8f0
+    style SYN fill:#2e1065,stroke:#a855f7,color:#e2e8f0
+    style INT fill:#451a03,stroke:#f59e0b,color:#e2e8f0
+    style START fill:#1e293b,stroke:#475569,color:#94a3b8
+    style DONE  fill:#1e293b,stroke:#475569,color:#94a3b8
+      </div>
+    </div>
+
+    <div class="callout">
+      <div class="callout-icon">&#x26A1;</div>
+      <div>
+        <h4>Human-in-the-Loop Interrupt</h4>
+        <p>
+          When the Clarity Agent detects a vague query with no company name,
+          <code>langgraph.types.interrupt()</code> pauses the graph and surfaces a
+          clarification prompt to the caller. Execution resumes via
+          <code>Command(resume=...)</code> — the Clarity Agent re-runs with the
+          updated context, then routes to Research as normal.
+          Conversation state is fully preserved across the interrupt boundary via
+          <strong>MemorySaver</strong>.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══════════════════ 2. EXAMPLE QUERIES ═══════════════════ -->
+  <section>
+    <h2><span class="dot"></span>Example Queries</h2>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th style="width:30%">Query</th>
+            <th>Path through graph</th>
+            <th>Notes</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><span class="query-text">"What is happening with Apple?"</span></td>
+            <td>
+              <div class="flow-path">
+                <span class="pill blue">clarity</span>
+                <span class="flow-arrow">&#8594;</span>
+                <span class="pill green">research &#9733;9</span>
+                <span class="flow-arrow">&#8594;</span>
+                <span class="pill purple">synthesis</span>
+              </div>
+            </td>
+            <td>Fast path — confidence &ge; 6 skips validator entirely</td>
+          </tr>
+          <tr>
+            <td><span class="query-text">"Tell me about a big tech company"</span></td>
+            <td>
+              <div class="flow-path">
+                <span class="pill blue">clarity</span>
+                <span class="flow-arrow">&#8594;</span>
+                <span class="pill yellow">INTERRUPT</span>
+                <span class="flow-arrow">&#8594;</span>
+                <span class="pill blue">clarity</span>
+                <span class="flow-arrow">&#8594;</span>
+                <span class="pill green">research</span>
+                <span class="flow-arrow">&#8594;</span>
+                <span class="pill purple">synthesis</span>
+              </div>
+            </td>
+            <td>Human-in-the-loop fires; user says "Tesla" — graph resumes</td>
+          </tr>
+          <tr>
+            <td><span class="query-text">"Tell me about Stripe"</span></td>
+            <td>
+              <div class="flow-path">
+                <span class="pill blue">clarity</span>
+                <span class="flow-arrow">&#8594;</span>
+                <span class="pill green">research &#9733;3</span>
+                <span class="flow-arrow">&#8594;</span>
+                <span class="pill red">validator</span>
+                <span class="flow-arrow">&#8594;</span>
+                <span class="pill green">research &#9733;7</span>
+                <span class="flow-arrow">&#8594;</span>
+                <span class="pill purple">synthesis</span>
+              </div>
+            </td>
+            <td>Low confidence triggers validator loop; second pass succeeds</td>
+          </tr>
+          <tr>
+            <td>
+              <span class="query-text">Follow-up: "Who is their CEO?"</span>
+              <div class="note-text">(after Apple query)</div>
+            </td>
+            <td>
+              <div class="flow-path">
+                <span class="pill blue">clarity</span>
+                <span class="flow-arrow">&#8594;</span>
+                <span class="pill green">research</span>
+                <span class="flow-arrow">&#8594;</span>
+                <span class="pill purple">synthesis</span>
+              </div>
+            </td>
+            <td>Synthesis uses full <code>messages</code> history — resolves "their" from prior turn</td>
+          </tr>
+          <tr>
+            <td><span class="query-text">"apple stock news recent stuff"</span></td>
+            <td>
+              <div class="flow-path">
+                <span class="pill blue">clarity</span>
+                <span class="flow-arrow">&#8594;</span>
+                <span class="pill green">research</span>
+                <span class="flow-arrow">&#8594;</span>
+                <span class="pill purple">synthesis</span>
+              </div>
+            </td>
+            <td>Informal but specific — passes clarity check, company name present</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ═══════════════════ 3. AGENT CARDS ═══════════════════ -->
+  <section>
+    <h2><span class="dot"></span>Agents</h2>
+    <div class="agents">
+
+      <div class="agent-card clarity">
+        <div class="agent-name">Clarity Agent</div>
+        <div class="agent-file">src/agents/clarity.py</div>
+        <div class="agent-desc">
+          Determines whether the user's query names a specific company and has
+          understandable intent. Uses LLM classification. Triggers
+          <code style="font-size:0.78rem;background:rgba(255,255,255,0.07);padding:0.1rem 0.3rem;border-radius:4px;">interrupt()</code>
+          when the query is too vague. Resets <code style="font-size:0.78rem;background:rgba(255,255,255,0.07);padding:0.1rem 0.3rem;border-radius:4px;">research_attempts</code> to 0 each turn.
+        </div>
+        <div class="tag-label">State reads</div>
+        <div class="tag-row">
+          <span class="tag input">query</span>
+        </div>
+        <div class="tag-label">State writes</div>
+        <div class="tag-row">
+          <span class="tag output">clarity_status</span>
+          <span class="tag output">research_attempts = 0</span>
+        </div>
+        <div class="tag-label">Routes to</div>
+        <div class="tag-row">
+          <span class="tag route">INTERRUPT &rarr; Research</span>
+        </div>
+      </div>
+
+      <div class="agent-card research">
+        <div class="agent-name">Research Agent</div>
+        <div class="agent-file">src/agents/research.py</div>
+        <div class="agent-desc">
+          Calls the Tavily Search API for live web results on company news and
+          financials, then merges with curated mock data. Synthesizes findings
+          and assigns a <code style="font-size:0.78rem;background:rgba(255,255,255,0.07);padding:0.1rem 0.3rem;border-radius:4px;">confidence_score</code>
+          from 0 to 10 based on result quality.
+        </div>
+        <div class="tag-label">State reads</div>
+        <div class="tag-row">
+          <span class="tag input">query</span>
+        </div>
+        <div class="tag-label">State writes</div>
+        <div class="tag-row">
+          <span class="tag output">research_findings</span>
+          <span class="tag output">confidence_score</span>
+        </div>
+        <div class="tag-label">Routes to</div>
+        <div class="tag-row">
+          <span class="tag route">Validator (low) &rarr; Synthesis (high)</span>
+        </div>
+      </div>
+
+      <div class="agent-card validator">
+        <div class="agent-name">Validator Agent</div>
+        <div class="agent-file">src/agents/validator.py</div>
+        <div class="agent-desc">
+          Evaluates whether research findings are sufficient to fully answer the
+          user's query. Increments the attempt counter and sends the graph back
+          to Research up to 3 times before forcing Synthesis.
+        </div>
+        <div class="tag-label">State reads</div>
+        <div class="tag-row">
+          <span class="tag input">query</span>
+          <span class="tag input">research_findings</span>
+          <span class="tag input">research_attempts</span>
+        </div>
+        <div class="tag-label">State writes</div>
+        <div class="tag-row">
+          <span class="tag output">validation_result</span>
+          <span class="tag output">research_attempts + 1</span>
+        </div>
+        <div class="tag-label">Routes to</div>
+        <div class="tag-row">
+          <span class="tag route">Research (loop) &rarr; Synthesis</span>
+        </div>
+      </div>
+
+      <div class="agent-card synthesis">
+        <div class="agent-name">Synthesis Agent</div>
+        <div class="agent-file">src/agents/synthesis.py</div>
+        <div class="agent-desc">
+          Produces the final user-facing response. Passes the full
+          <code style="font-size:0.78rem;background:rgba(255,255,255,0.07);padding:0.1rem 0.3rem;border-radius:4px;">messages</code>
+          conversation history to the LLM so follow-up questions are answered
+          in context without re-asking for company names.
+        </div>
+        <div class="tag-label">State reads</div>
+        <div class="tag-row">
+          <span class="tag input">query</span>
+          <span class="tag input">research_findings</span>
+          <span class="tag input">messages (history)</span>
+        </div>
+        <div class="tag-label">State writes</div>
+        <div class="tag-row">
+          <span class="tag output">messages += AIMessage</span>
+        </div>
+        <div class="tag-label">Routes to</div>
+        <div class="tag-row">
+          <span class="tag route">END</span>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ═══════════════════ 4. ROUTING TABLE ═══════════════════ -->
+  <section>
+    <h2><span class="dot"></span>Conditional Routing</h2>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>From</th>
+            <th>To</th>
+            <th>Condition</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Clarity</td>
+            <td><span class="pill yellow">INTERRUPT</span></td>
+            <td>No company name detected &mdash; query is too vague</td>
+          </tr>
+          <tr>
+            <td>Clarity</td>
+            <td><span class="pill blue">Research</span></td>
+            <td><code>clarity_status = "clear"</code></td>
+          </tr>
+          <tr>
+            <td>Research</td>
+            <td><span class="pill red">Validator</span></td>
+            <td><code>confidence_score &lt; 6</code> &mdash; findings may be incomplete</td>
+          </tr>
+          <tr>
+            <td>Research</td>
+            <td><span class="pill green">Synthesis</span></td>
+            <td><code>confidence_score &ge; 6</code> &mdash; fast path, skips validation</td>
+          </tr>
+          <tr>
+            <td>Validator</td>
+            <td><span class="pill blue">Research</span></td>
+            <td><code>validation_result = "insufficient"</code> AND <code>attempts &lt; 3</code></td>
+          </tr>
+          <tr>
+            <td>Validator</td>
+            <td><span class="pill green">Synthesis</span></td>
+            <td><code>validation_result = "sufficient"</code> OR <code>attempts &ge; 3</code></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ═══════════════════ 5. STATE SCHEMA ═══════════════════ -->
+  <section>
+    <h2><span class="dot"></span>State Schema</h2>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Field</th>
+            <th>Type</th>
+            <th>Description</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>query</code></td>
+            <td><code>str</code></td>
+            <td>The user's raw input text for the current turn</td>
+          </tr>
+          <tr>
+            <td><code>messages</code></td>
+            <td><code>Annotated[list, add_messages]</code></td>
+            <td>Full conversation history; LangGraph reducer appends each new message</td>
+          </tr>
+          <tr>
+            <td><code>clarity_status</code></td>
+            <td><code>str</code></td>
+            <td><code>"clear"</code> or <code>"needs_clarification"</code> — set by Clarity Agent</td>
+          </tr>
+          <tr>
+            <td><code>research_findings</code></td>
+            <td><code>str</code></td>
+            <td>Formatted string of Tavily results + mock data from Research Agent</td>
+          </tr>
+          <tr>
+            <td><code>confidence_score</code></td>
+            <td><code>int</code></td>
+            <td>0&#8211;10 quality score assigned by Research Agent; gates validator bypass</td>
+          </tr>
+          <tr>
+            <td><code>validation_result</code></td>
+            <td><code>str</code></td>
+            <td><code>"sufficient"</code> or <code>"insufficient"</code> — set by Validator Agent</td>
+          </tr>
+          <tr>
+            <td><code>research_attempts</code></td>
+            <td><code>int</code></td>
+            <td>Loop counter reset to 0 by Clarity Agent; incremented by Validator Agent</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ═══════════════════ 6. TOOLS & INTEGRATIONS ═══════════════════ -->
+  <section>
+    <h2><span class="dot"></span>Tools &amp; Integrations</h2>
+    <div class="tools-grid">
+
+      <div class="tool-card">
+        <div class="tool-icon">&#x1F578;&#xFE0F;</div>
+        <h4>LangGraph</h4>
+        <p>
+          <code>StateGraph</code> with conditional edges and
+          <code>MemorySaver</code> checkpointer. Powers interrupt/resume and
+          the validator retry loop.
+        </p>
+      </div>
+
+      <div class="tool-card">
+        <div class="tool-icon">&#x1F50E;</div>
+        <h4>Tavily</h4>
+        <p>
+          Live web search for company news, financials, and recent developments.
+          Falls back to curated mock data when the API is unavailable.
+        </p>
+      </div>
+
+      <div class="tool-card">
+        <div class="tool-icon">&#x1F9E9;</div>
+        <h4>OpenRouter</h4>
+        <p>
+          OpenAI-compatible gateway used for every LLM call across all agents.
+          Model is configurable via <code>MODEL_NAME</code> env var.
+        </p>
+      </div>
+
+      <div class="tool-card">
+        <div class="tool-icon">&#x1F4BE;</div>
+        <h4>MemorySaver</h4>
+        <p>
+          In-memory LangGraph checkpointer keyed by <code>thread_id</code>.
+          Accumulates the full message history across multi-turn conversations.
+        </p>
+      </div>
+
+      <div class="tool-card">
+        <div class="tool-icon">&#x1F4C8;</div>
+        <h4>LangSmith</h4>
+        <p>
+          Automatic end-to-end tracing when <code>LANGCHAIN_API_KEY</code> is
+          set. Every agent node run and LLM call is captured in a trace.
+        </p>
+      </div>
+
+      <div class="tool-card">
+        <div class="tool-icon">&#x25B6;&#xFE0F;</div>
+        <h4>Next.js UI</h4>
+        <p>
+          Chat frontend in <code>frontend/</code>. Streams responses from the
+          FastAPI backend via SSE. Runs on <code>localhost:3000</code>.
+        </p>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ═══════════════════ 7. HOW TO RUN ═══════════════════ -->
+  <section>
+    <h2><span class="dot"></span>How to Run</h2>
+    <div class="run-cols">
+
+      <div class="run-card cli">
+        <h3><span class="run-dot"></span>CLI</h3>
+        <pre><span class="cmt"># install deps and run interactive loop</span>
+<span class="cmd">uv run main.py</span>
+
+<span class="cmt"># set required env vars first</span>
+<span class="kw">OPENAI_API_KEY</span>=sk-...
+<span class="kw">TAVILY_API_KEY</span>=tvly-...
+<span class="kw">MODEL_NAME</span>=google/gemini-...</pre>
+        <p style="font-size:0.8rem;color:#475569;">
+          Runs a terminal-based multi-turn chat session directly
+          against the LangGraph workflow. No server required.
+        </p>
+      </div>
+
+      <div class="run-card chat">
+        <h3><span class="run-dot"></span>Chat UI</h3>
+        <pre><span class="cmt"># 1. start the FastAPI backend</span>
+<span class="cmd">uvicorn api:app --reload</span>
+
+<span class="cmt"># 2. start the Next.js frontend</span>
+<span class="cmd">cd frontend &amp;&amp; npm run dev</span>
+
+<span class="cmt"># open in browser</span>
+<span class="url">http://localhost:3000</span></pre>
+        <p style="font-size:0.8rem;color:#475569;">
+          Backend streams SSE on <code>/chat</code>. Frontend polls for
+          interrupt events and re-prompts the user inline.
+        </p>
+      </div>
+
+    </div>
+  </section>
+
+</main>
+
+<footer>
+  turing-interview &middot; multi-agent-workflow &middot; LangGraph
+</footer>
+
+<script>
+  mermaid.initialize({ startOnLoad: true, theme: 'dark', themeVariables: { fontSize: '14px' } });
+</script>
+
+</body>
+</html>

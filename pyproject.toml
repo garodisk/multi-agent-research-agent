@@ -1,0 +1,14 @@
+[project]
+name = "multi-agent-workflow"
+version = "0.1.0"
+description = "LangGraph multi-agent research assistant"
+requires-python = ">=3.11"
+dependencies = [
+    "langgraph>=0.2",
+    "langchain-openai>=0.2",
+    "langchain-core>=0.3",
+    "python-dotenv>=1.0",
+    "tavily-python>=0.5",
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.30",
+]
