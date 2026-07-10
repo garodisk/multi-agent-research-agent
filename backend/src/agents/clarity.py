@@ -9,12 +9,12 @@ You are deciding whether a research query is clear enough to act on.
 
 {history_section}Current query: {query}
 
-A query is CLEAR if:
-- It names a specific company (Apple, Tesla, Google, etc.), OR
-- It refers to a company established in the conversation history above (e.g. "their CEO", "its stock price", "tell me more")
-
-A query NEEDS_CLARIFICATION if:
-- No company can be inferred from the query or prior conversation
+Rules (apply in order):
+1. If the conversation history above mentions ANY specific company, and the current query uses pronouns or implicit references \
+("this", "it", "its", "their", "they", "the company", "how old", "tell me more", "what about", etc.) — respond "clear". \
+The company is already established by context.
+2. If the query explicitly names a specific company — respond "clear".
+3. Only respond "needs_clarification" if there is NO conversation history AND no company can be inferred from the query itself.
 
 Respond with ONLY one word: "clear" or "needs_clarification"."""
 
