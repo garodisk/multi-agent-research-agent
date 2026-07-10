@@ -1,4 +1,8 @@
-"""Direct test of multi-turn conversation memory without HTTP/UI."""
+"""Direct test of multi-turn conversation memory without HTTP/UI.
+
+Covers the tricky case where Apple dominates history and Tesla is
+mentioned briefly — a pronoun follow-up should refer to Tesla.
+"""
 import sys
 from pathlib import Path
 from dotenv import load_dotenv
@@ -11,10 +15,8 @@ from langchain_core.messages import HumanMessage
 from src.graph import build_graph
 
 
-def run_turn(graph, thread_id: str, message: str, turn: int) -> None:
-    print(f"\n{'='*60}")
-    print(f"TURN {turn}: {message!r}")
-    print(f"{'='*60}")
+def run_turn(graph, thread_id: str, message: str, turn: int) -> str:
+    print(f"\n{'='*60}\nTURN {turn}: {message!r}\n{'='*60}")
     config = {"configurable": {"thread_id": thread_id}}
     input_ = {
         "messages": [HumanMessage(content=message)],
@@ -25,31 +27,36 @@ def run_turn(graph, thread_id: str, message: str, turn: int) -> None:
     for chunk in graph.stream(input_, config, stream_mode="updates"):
         for node, data in chunk.items():
             if node == "__interrupt__":
-                print(f"  >>> INTERRUPT: {data}")
                 continue
             agents.append(node)
-            if node == "research" and isinstance(data, dict):
-                print(f"  [research] confidence={data.get('confidence_score')}")
-            if node == "validator" and isinstance(data, dict):
-                print(f"  [validator] result={data.get('validation_result')}")
     state = graph.get_state(config)
-    interrupted = any(t.interrupts for t in state.tasks)
     print(f"  agents: {' -> '.join(agents)}")
-    print(f"  interrupted: {interrupted}")
-    if not interrupted and state.values.get("messages"):
+    if state.values.get("messages"):
         answer = state.values["messages"][-1].content
-        print(f"  ANSWER: {answer[:200]}...")
+        print(f"  ANSWER: {answer[:250]}...")
+        return answer
+    return ""
 
 
 def main():
     graph = build_graph()
-    thread = "test-thread-multiturn"
+    thread = "test-recency"
 
     run_turn(graph, thread, "What's happening with Apple?", 1)
-    run_turn(graph, thread, "any new products released?", 2)
-    run_turn(graph, thread, "who is the CEO?", 3)
-    run_turn(graph, thread, "what about Tesla?", 4)
-    run_turn(graph, thread, "how is it doing financially?", 5)
+    run_turn(graph, thread, "what are their competitors and products?", 2)
+    run_turn(graph, thread, "which is the strongest?", 3)
+    run_turn(graph, thread, "how is tesla doing?", 4)
+    answer = run_turn(graph, thread, "its recent products?", 5)
+
+    print("\n" + "="*60)
+    print("VERDICT")
+    print("="*60)
+    lower = answer.lower()
+    if "tesla" in lower and lower.count("tesla") > lower.count("apple"):
+        print("PASS: Turn 5 correctly answered about Tesla, not Apple")
+    else:
+        print("FAIL: Turn 5 got confused — answered about wrong company")
+        print(f"  tesla mentions={lower.count('tesla')}, apple mentions={lower.count('apple')}")
 
 
 if __name__ == "__main__":

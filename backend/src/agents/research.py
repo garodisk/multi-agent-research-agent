@@ -11,19 +11,23 @@ from ..state import State
 _ENRICH_PROMPT = """\
 Rewrite the user's current query into a self-contained web search query about a company.
 
-CONVERSATION HISTORY:
+CONVERSATION HISTORY (oldest to newest):
 {conversation}
 
 CURRENT QUERY: {query}
 
-The rewritten query MUST include the specific company name explicitly.
-If the current query already names a company (e.g. "Tell me about Tesla"), use that company.
-Otherwise, use the company established earlier in the conversation.
+Rules:
+1. If the current query explicitly names a company, use THAT company.
+2. Otherwise, use the MOST RECENTLY discussed company from the history. \
+   Pronouns like "it", "its", "their", "this company" always refer to the LAST company mentioned, \
+   not to any earlier company that dominated the conversation.
+3. The rewritten query MUST include the specific company name explicitly.
 
 Examples:
-- Query "any new products released?" after Apple was discussed  →  "Apple new products released 2026"
-- Query "who is the CEO?" after Tesla was discussed  →  "Tesla CEO"
+- History mentions Apple then Tesla. Query "its recent products?"  →  "Tesla recent products"
+- History mentions only Apple. Query "any new products?"  →  "Apple new products"
 - Query "Tell me about Microsoft"  →  "Microsoft recent news"
+- History mentions Apple then Tesla. Query "who is Apple's CEO?"  →  "Apple CEO"
 
 Return ONLY the rewritten search query, nothing else."""
 
