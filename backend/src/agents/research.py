@@ -1,23 +1,12 @@
 import os
 
-from langchain_core.messages import HumanMessage, AIMessage
+from langchain_core.messages import HumanMessage
 
 from tavily import TavilyClient
 
 from ..data import lookup_company
 from ..llm import get_llm
 from ..state import State
-
-_ENRICH_PROMPT = """\
-Given this conversation history and the current query, write a single self-contained search query
-that a web search engine can understand (include the company name explicitly).
-
-Conversation history:
-{history}
-
-Current query: {query}
-
-Return ONLY the improved search query, nothing else."""
 
 _SYNTHESIZE_PROMPT = """\
 You are a research analyst. Synthesize the information below to answer the user's query.
@@ -36,26 +25,12 @@ CONFIDENCE: <integer 0-10>"""
 
 def research_agent(state: State) -> dict:
     query = state["query"]
-    messages = state.get("messages", [])
+    current_company = state.get("current_company", "")
 
-    # Build history string from prior turns
-    history_lines = []
-    for msg in messages[:-1]:
-        if isinstance(msg, HumanMessage):
-            history_lines.append(f"User: {msg.content}")
-        elif isinstance(msg, AIMessage):
-            history_lines.append(f"Assistant: {msg.content[:150]}")
-
-    # Enrich the query with company context from history (handles follow-ups like "their CEO")
+    # If company is established and not already in the query, prepend it for search
     effective_query = query
-    if history_lines:
-        enriched = get_llm().invoke([
-            HumanMessage(content=_ENRICH_PROMPT.format(
-                history="\n".join(history_lines[-6:]),
-                query=query,
-            ))
-        ])
-        effective_query = enriched.content.strip()
+    if current_company and current_company.lower() not in query.lower():
+        effective_query = f"{current_company} {query}"
 
     search_results = _tavily_search(effective_query)
     mock_data = lookup_company(effective_query) or lookup_company(query)
