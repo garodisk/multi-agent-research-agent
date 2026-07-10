@@ -76,7 +76,6 @@ async def chat(req: ChatRequest):
     state_update = {
         "messages": [HumanMessage(content=req.message)],
         "query": req.message,
-        "current_company": "",
         "research_attempts": 0,
     }
     return _execute(state_update, req.thread_id)
