@@ -2,64 +2,14 @@
 import { useState, useRef, useEffect, FormEvent } from "react";
 
 // ── Types ──────────────────────────────────────────────────────────────────
-interface AgentStep {
-  agent: string;
-  confidence?: number;
-  result?: string;
-  attempts?: number;
-}
-
 interface ChatMessage {
   id: string;
   role: "user" | "assistant" | "clarification";
   content: string;
-  trace?: AgentStep[];
-  agentsRun?: { agent: string }[];
-}
-
-// ── Agent pill config ──────────────────────────────────────────────────────
-const AGENT_CONFIG: Record<string, { color: string; bg: string; label: string }> = {
-  clarity:   { color: "#93c5fd", bg: "rgba(59,130,246,0.15)",  label: "Clarity"   },
-  research:  { color: "#86efac", bg: "rgba(34,197,94,0.15)",   label: "Research"  },
-  validator: { color: "#fca5a5", bg: "rgba(239,68,68,0.15)",   label: "Validator" },
-  synthesis: { color: "#c4b5fd", bg: "rgba(168,85,247,0.15)",  label: "Synthesis" },
-};
-
-// ── AgentTrace component ───────────────────────────────────────────────────
-function AgentTrace({ steps }: { steps: AgentStep[] }) {
-  return (
-    <div style={{ display: "flex", alignItems: "center", gap: "6px", flexWrap: "wrap", marginTop: "12px" }}>
-      {steps.map((step, i) => {
-        const cfg = AGENT_CONFIG[step.agent] ?? { color: "#94a3b8", bg: "rgba(148,163,184,0.15)", label: step.agent };
-        let extra = "";
-        if (step.agent === "research" && step.confidence !== undefined)
-          extra = ` ★${step.confidence}`;
-        if (step.agent === "validator" && step.result)
-          extra = ` ${step.result === "sufficient" ? "✓" : "✗"}`;
-        return (
-          <span key={i} style={{ display: "flex", alignItems: "center", gap: "4px" }}>
-            {i > 0 && <span style={{ color: "#475569", fontSize: "11px" }}>→</span>}
-            <span style={{
-              background: cfg.bg,
-              color: cfg.color,
-              border: `1px solid ${cfg.color}33`,
-              borderRadius: "6px",
-              padding: "2px 8px",
-              fontSize: "11px",
-              fontWeight: 500,
-              fontFamily: "monospace",
-            }}>
-              {cfg.label}{extra}
-            </span>
-          </span>
-        );
-      })}
-    </div>
-  );
 }
 
 // ── TypingIndicator ────────────────────────────────────────────────────────
-function TypingIndicator({ agents }: { agents: string[] }) {
+function TypingIndicator() {
   return (
     <div style={{ display: "flex", gap: "12px", alignItems: "flex-start", marginBottom: "20px" }}>
       <div style={{
@@ -69,31 +19,12 @@ function TypingIndicator({ agents }: { agents: string[] }) {
       }}>🧠</div>
       <div style={{
         background: "#1a1f2e", border: "1px solid #2d3748", borderRadius: "14px",
-        padding: "14px 18px", display: "flex", flexDirection: "column", gap: "8px",
+        padding: "14px 18px", display: "flex", alignItems: "center", gap: "8px",
       }}>
-        <div style={{ display: "flex", alignItems: "center", gap: "5px" }}>
-          <span className="typing-dot" />
-          <span className="typing-dot" />
-          <span className="typing-dot" />
-          <span style={{ marginLeft: "6px", fontSize: "12px", color: "#64748b" }}>
-            {agents.length > 0 ? `Running ${agents[agents.length - 1]} agent…` : "Thinking…"}
-          </span>
-        </div>
-        {agents.length > 0 && (
-          <div style={{ display: "flex", gap: "4px", flexWrap: "wrap" }}>
-            {agents.map((a, i) => {
-              const cfg = AGENT_CONFIG[a] ?? { color: "#94a3b8", bg: "rgba(148,163,184,0.1)", label: a };
-              return (
-                <span key={i} style={{
-                  background: cfg.bg, color: cfg.color, border: `1px solid ${cfg.color}33`,
-                  borderRadius: "5px", padding: "1px 7px", fontSize: "10px", fontFamily: "monospace",
-                }}>
-                  {cfg.label} ✓
-                </span>
-              );
-            })}
-          </div>
-        )}
+        <span className="typing-dot" />
+        <span className="typing-dot" />
+        <span className="typing-dot" />
+        <span style={{ marginLeft: "6px", fontSize: "12px", color: "#64748b" }}>Thinking…</span>
       </div>
     </div>
   );
@@ -176,7 +107,6 @@ function MessageBubble({ msg, onClarify }: { msg: ChatMessage; onClarify?: (text
         <p style={{ fontSize: "14px", lineHeight: "1.75", color: "#e2e8f0", whiteSpace: "pre-wrap" }}>
           {msg.content}
         </p>
-        {msg.trace && msg.trace.length > 0 && <AgentTrace steps={msg.trace} />}
       </div>
     </div>
   );
@@ -189,10 +119,9 @@ export default function Page() {
     role: "assistant",
     content: "Hello! I am a multi-agent research assistant. Ask me about any company — try Apple, Tesla, or anything else. I will search the web and synthesize findings for you.",
   }]);
-  const [threadId] = useState(() => crypto.randomUUID());
+  const [threadId, setThreadId] = useState(() => crypto.randomUUID());
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
-  const [liveAgents, setLiveAgents] = useState<string[]>([]);
   const [awaitingClarification, setAwaitingClarification] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -201,9 +130,8 @@ export default function Page() {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, loading]);
 
-  const handleResponse = (data: { type: string; content?: string; trace?: AgentStep[]; prompt?: string; agents_run?: { agent: string }[] }) => {
+  const handleResponse = (data: { type: string; content?: string; prompt?: string }) => {
     setLoading(false);
-    setLiveAgents([]);
     if (data.type === "clarification_needed") {
       setAwaitingClarification(true);
       setMessages(prev => [...prev, {
@@ -217,7 +145,6 @@ export default function Page() {
         id: Date.now().toString(),
         role: "assistant",
         content: data.content ?? "",
-        trace: data.trace ?? [],
       }]);
     }
   };
@@ -227,7 +154,6 @@ export default function Page() {
     setMessages(prev => [...prev, { id: Date.now().toString(), role: "user", content: text }]);
     setInput("");
     setLoading(true);
-    setLiveAgents([]);
 
     const endpoint = isClarification ? "/api/clarify" : "/api/chat";
     const body = isClarification
@@ -241,22 +167,9 @@ export default function Page() {
         body: JSON.stringify(body),
       });
       const data = await res.json();
-
-      // Reconstruct live agent steps from trace for animation
-      if (data.trace) {
-        const steps: string[] = data.trace.map((s: AgentStep) => s.agent);
-        let i = 0;
-        const tick = () => {
-          if (i < steps.length) { setLiveAgents(steps.slice(0, i + 1)); i++; setTimeout(tick, 300); }
-          else handleResponse(data);
-        };
-        tick();
-      } else {
-        handleResponse(data);
-      }
+      handleResponse(data);
     } catch {
       setLoading(false);
-      setLiveAgents([]);
       setMessages(prev => [...prev, {
         id: Date.now().toString(),
         role: "assistant",
@@ -266,13 +179,13 @@ export default function Page() {
   };
 
   const newChat = () => {
+    setThreadId(crypto.randomUUID());
     setMessages([{
       id: "welcome",
       role: "assistant",
       content: "Hello! I am a multi-agent research assistant. Ask me about any company — try Apple, Tesla, or anything else.",
     }]);
     setAwaitingClarification(false);
-    setLiveAgents([]);
     inputRef.current?.focus();
   };
 
@@ -330,7 +243,7 @@ export default function Page() {
               onClarify={text => send(text, true)}
             />
           ))}
-          {loading && <TypingIndicator agents={liveAgents} />}
+          {loading && <TypingIndicator />}
           <div ref={bottomRef} />
         </div>
       </main>

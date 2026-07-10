@@ -1,12 +1,31 @@
 import os
 
-from langchain_core.messages import HumanMessage
+from langchain_core.messages import HumanMessage, AIMessage
 
 from tavily import TavilyClient
 
 from ..data import lookup_company
 from ..llm import get_llm
 from ..state import State
+
+_ENRICH_PROMPT = """\
+Rewrite the user's current query into a self-contained web search query about a company.
+
+CONVERSATION HISTORY:
+{conversation}
+
+CURRENT QUERY: {query}
+
+The rewritten query MUST include the specific company name explicitly.
+If the current query already names a company (e.g. "Tell me about Tesla"), use that company.
+Otherwise, use the company established earlier in the conversation.
+
+Examples:
+- Query "any new products released?" after Apple was discussed  →  "Apple new products released 2026"
+- Query "who is the CEO?" after Tesla was discussed  →  "Tesla CEO"
+- Query "Tell me about Microsoft"  →  "Microsoft recent news"
+
+Return ONLY the rewritten search query, nothing else."""
 
 _SYNTHESIZE_PROMPT = """\
 You are a research analyst. Synthesize the information below to answer the user's query.
@@ -23,20 +42,34 @@ FINDINGS: <your research summary>
 CONFIDENCE: <integer 0-10>"""
 
 
+def _format_conversation(messages: list) -> str:
+    lines = []
+    for msg in messages[:-1]:
+        if isinstance(msg, HumanMessage):
+            lines.append(f"User: {msg.content}")
+        elif isinstance(msg, AIMessage):
+            lines.append(f"Assistant: {msg.content[:200]}")
+    if not lines:
+        return "(no prior conversation)"
+    return "\n".join(lines[-8:])
+
+
 def research_agent(state: State) -> dict:
     query = state["query"]
-    current_company = state.get("current_company", "")
+    messages = state.get("messages", [])
 
-    # If company is established and not already in the query, prepend it for search
-    effective_query = query
-    if current_company and current_company.lower() not in query.lower():
-        effective_query = f"{current_company} {query}"
+    conversation = _format_conversation(messages)
+    enriched = get_llm().invoke([HumanMessage(content=_ENRICH_PROMPT.format(
+        conversation=conversation, query=query
+    ))]).content.strip()
 
-    search_results = _tavily_search(effective_query)
-    mock_data = lookup_company(effective_query) or lookup_company(query)
+    print(f"[research] query={query!r} enriched={enriched!r}")
+
+    search_results = _tavily_search(enriched)
+    mock_data = lookup_company(enriched) or lookup_company(query)
 
     prompt = _SYNTHESIZE_PROMPT.format(
-        query=query,  # keep original for the answer framing
+        query=query,
         search_results=search_results or "No search results available.",
         mock_data=mock_data or "No mock data available.",
     )

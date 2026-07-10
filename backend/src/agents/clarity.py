@@ -1,42 +1,60 @@
-from langchain_core.messages import HumanMessage
+from langchain_core.messages import HumanMessage, AIMessage
 
 from langgraph.types import interrupt
 
 from ..llm import get_llm
 from ..state import State
 
-_EXTRACT_PROMPT = """\
-Does this query explicitly name a specific company?
+_PROMPT = """\
+You are the CLARITY agent for a company research assistant.
+Decide if the user's CURRENT query can be researched, or if it is too vague to act on.
 
-Query: {query}
+FULL CONVERSATION HISTORY:
+{conversation}
 
-Reply with ONLY the company name if one is explicitly mentioned (e.g. "Tesla", "Apple", "Google").
-Reply with ONLY the word "none" if no company is named in the query."""
+CURRENT USER QUERY: {query}
+
+Rules — respond "clear" if ANY of these is true:
+- The current query explicitly names a specific company or organization
+- The conversation history above mentions a specific company, AND the current query is a follow-up \
+(uses "it", "its", "they", "their", "this", "the company", or asks about products/CEO/stock/history/employees/anything researchable)
+
+Respond "needs_clarification" ONLY if NO company appears anywhere in the conversation history \
+AND the current query does not name one either.
+
+Respond with ONLY one word: "clear" or "needs_clarification"."""
+
+
+def _format_conversation(messages: list) -> str:
+    lines = []
+    # Exclude the current (last) HumanMessage — it's the query itself
+    for msg in messages[:-1]:
+        if isinstance(msg, HumanMessage):
+            lines.append(f"User: {msg.content}")
+        elif isinstance(msg, AIMessage):
+            lines.append(f"Assistant: {msg.content[:250]}")
+    if not lines:
+        return "(no prior conversation — this is the first message)"
+    return "\n".join(lines[-8:])
 
 
 def clarity_agent(state: State) -> dict:
     query = state["query"]
-    current_company = state.get("current_company", "")
+    messages = state.get("messages", [])
 
-    response = get_llm().invoke([HumanMessage(content=_EXTRACT_PROMPT.format(query=query))])
-    named = response.content.strip()
+    conversation = _format_conversation(messages)
+    prompt = _PROMPT.format(conversation=conversation, query=query)
+    verdict = get_llm().invoke([HumanMessage(content=prompt)]).content.strip().lower()
 
-    if named.lower() != "none" and named:
-        # User named a company — use it (handles new company replacing old)
-        return {"clarity_status": "clear", "current_company": named, "research_attempts": 0}
+    print(f"[clarity] query={query!r} history_len={len(messages)} verdict={verdict!r}")
 
-    if current_company:
-        # No new company named but one is already established — continue with it
-        return {"clarity_status": "clear", "research_attempts": 0}
+    if "needs_clarification" in verdict:
+        clarification = interrupt("Which specific company are you asking about?")
+        return {
+            "query": clarification,
+            "clarity_status": "clear",
+            "messages": [HumanMessage(content=clarification)],
+            "research_attempts": 0,
+        }
 
-    # No company anywhere — ask
-    clarification = interrupt(
-        "Which specific company are you asking about?"
-    )
-    return {
-        "query": clarification,
-        "clarity_status": "clear",
-        "current_company": clarification,
-        "messages": [HumanMessage(content=clarification)],
-        "research_attempts": 0,
-    }
+    return {"clarity_status": "clear", "research_attempts": 0}
