@@ -1,6 +1,12 @@
 import os
+import sys
+from pathlib import Path
 
 from dotenv import load_dotenv
+
+sys.path.insert(0, str(Path(__file__).parent))
+load_dotenv(Path(__file__).parent / ".env")
+load_dotenv(Path(__file__).parent.parent / ".env", override=False)
 from langchain_core.messages import HumanMessage
 from langgraph.types import Command
 

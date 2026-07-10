@@ -14,9 +14,9 @@ build/
 .pytest_cache/
 
 # Node
-frontend/node_modules/
-frontend/.next/
-frontend/out/
+node_modules/
+.next/
+out/
 
 # OS
 .DS_Store
@@ -34,6 +34,3 @@ Thumbs.db
 *.jpg
 *.jpeg
 plan.md
-
-# uv lock (optional — remove if you want to commit it)
-# uv.lock

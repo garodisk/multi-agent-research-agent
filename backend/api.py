@@ -1,7 +1,13 @@
 import os
+import sys
+from pathlib import Path
 from dotenv import load_dotenv
 
-load_dotenv()
+# ensure src/ is importable when running from any directory
+sys.path.insert(0, str(Path(__file__).parent))
+# find .env in backend/ or parent directory
+load_dotenv(Path(__file__).parent / ".env")
+load_dotenv(Path(__file__).parent.parent / ".env", override=False)
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -83,3 +89,11 @@ async def clarify(req: ClarifyRequest):
 @app.get("/health")
 async def health():
     return {"status": "ok", "model": os.getenv("MODEL_NAME", "openai/gpt-4o-mini")}
+
+
+@app.get("/debug/{thread_id}")
+async def debug_state(thread_id: str):
+    config = {"configurable": {"thread_id": thread_id}}
+    state = graph.get_state(config)
+    msgs = [{"type": type(m).__name__, "content": m.content[:100]} for m in state.values.get("messages", [])]
+    return {"message_count": len(msgs), "messages": msgs, "next": list(state.next)}

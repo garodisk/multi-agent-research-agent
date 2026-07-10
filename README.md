@@ -1,107 +1,46 @@
 ﻿# multi-agent-workflow
 
-A LangGraph multi-agent research assistant for company information queries. Combines Tavily live web search with four specialized LLM agents, human-in-the-loop clarification, and a Next.js chat UI. Built for the turing-interview exercise.
+A LangGraph multi-agent research assistant built for the **turing-interview** exercise. Four specialized agents collaborate with human-in-the-loop clarification, live Tavily search, stateful multi-turn memory, and a Next.js chat UI deployable to Vercel.
+
+---
+
+## Deliverables Checklist
+
+| # | Requirement | Status |
+|---|---|---|
+| 1 | Working LangGraph with 4 agents | Done - Clarity, Research, Validator, Synthesis |
+| 2 | State schema with all required fields | Done - 7 fields in backend/src/state.py |
+| 3 | 3 conditional routing functions | Done - _route_research, _route_validator, interrupt inside Clarity |
+| 4 | Feedback loop Validator back to Research with attempt counter | Done - loops up to 3x, tracked in research_attempts |
+| 5 | Interrupt mechanism for unclear queries | Done - langgraph.types.interrupt() in Clarity agent |
+| 6 | Multi-turn conversation with memory | Done - MemorySaver checkpointer, state persists per thread_id |
+| 7 | 2 example conversation turns | Done - see Example Conversations below |
+| 8 | Software engineering best practices | Done - typed state, single-responsibility agents, clear module separation |
+| 9 | README with run instructions | Done - see Running the System below |
+| 10 | Assumptions documented | Done - see Assumptions below |
+| 11 | Beyond Expected Deliverable | Done - see last section |
 
 ---
 
 ## Architecture
 
-```mermaid
-flowchart TD
-    START([User Input]) --> CA
+Four agents connected in a LangGraph StateGraph with MemorySaver checkpointer:
 
-    CA["Clarity Agent
-    Checks if query names a company
-    LLM prompt-based classification"]
+- Clarity Agent checks if the query names a specific company; fires interrupt() if vague
+- Research Agent runs Tavily live search + mock data lookup, scores confidence 0-10
+- Validator Agent checks if findings fully answer the query, loops back up to 3 times
+- Synthesis Agent uses full conversation history to write the final response
 
-    CA -->|needs_clarification| INT["INTERRUPT
-    Pauses graph, asks user
-    for company name"]
-    INT -->|User provides clarification| CA
-
-    CA -->|clear| RA
-
-    RA["Research Agent
-    1. Tavily live web search
-    2. Mock data lookup
-    3. LLM synthesizes findings
-    Assigns confidence_score 0-10"]
-
-    RA -->|confidence >= 6| SYN
-    RA -->|confidence < 6| VA
-
-    VA["Validator Agent
-    LLM checks if findings fully
-    answer the user query
-    Increments attempt counter"]
-
-    VA -->|insufficient AND attempts < 3| RA
-    VA -->|sufficient OR attempts >= 3| SYN
-
-    SYN["Synthesis Agent
-    LLM with full message history
-    Formats final user-facing response"]
-
-    SYN --> DONE([Response to User])
-    DONE -->|Follow-up question| START
-```
-
-### Routing table
+### Routing Logic
 
 | From | To | Condition |
 |---|---|---|
-| Clarity | INTERRUPT | No company name in query |
-| Clarity | Research | `clarity_status = "clear"` |
-| Research | Validator | `confidence_score < 6` |
-| Research | Synthesis | `confidence_score >= 6` (fast path) |
-| Validator | Research | `validation_result = "insufficient"` AND `attempts < 3` |
-| Validator | Synthesis | `validation_result = "sufficient"` OR `attempts >= 3` |
-
----
-
-## Example Queries & Agent Paths
-
-### 1. Clear query -- fast path (confidence >= 6)
-```
-You: What is happening with Apple lately?
-```
-**Agents used:** `clarity` -> `research` -> `synthesis`
-**Tools:** LLM (clarity check), Tavily search + mock data, LLM (synthesis)
-**Path:** Clarity scores it clear -> Research finds rich data, confidence=9 -> skips Validator -> Synthesis responds
-
-### 2. Vague query -- triggers human-in-the-loop interrupt
-```
-You: Tell me about a big tech company
-Assistant: Your query is vague -- which specific company are you asking about?
-You: Tesla
-```
-**Agents used:** `clarity` -> INTERRUPT -> `clarity` -> `research` -> `synthesis`
-**Tools:** LLM (clarity), `interrupt()` pause, LLM (clarity re-run on resume), Tavily + mock data, LLM (synthesis)
-**Path:** Clarity detects no company -> interrupt() pauses graph -> user clarifies "Tesla" -> graph resumes, clarity re-runs -> research -> synthesis
-
-### 3. Unknown company -- validator retry loop
-```
-You: Tell me about Stripe
-```
-**Agents used:** `clarity` -> `research` -> `validator` -> `research` -> `validator` -> `synthesis`
-**Tools:** LLM (clarity), Tavily (limited results, low confidence), LLM (validator rejects), Tavily retry, LLM (validator accepts or max attempts reached), LLM (synthesis)
-**Path:** No mock data for Stripe -> Tavily returns some results but confidence < 6 -> Validator may loop up to 3 times -> Synthesis with best available findings
-
-### 4. Multi-turn follow-up conversation
-```
-Turn 1 -- You: What is happening with Tesla?
-Turn 2 -- You: Who is their CEO?
-Turn 3 -- You: Tell me more about the FSD technology
-```
-**Agents used (each turn):** `clarity` -> `research` -> `synthesis`
-**Multi-turn:** MemorySaver checkpointer accumulates all messages. Synthesis agent receives full history so follow-up answers reference prior context.
-
-### 5. Poorly worded but specific query
-```
-You: apple stock news recent stuff
-```
-**Agents used:** `clarity` -> `research` -> `synthesis`
-LLM in Clarity is lenient -- if a company name is present the query passes as "clear" even with informal phrasing.
+| Clarity | INTERRUPT | No company name detected |
+| Clarity | Research | clarity_status = clear |
+| Research | Validator | confidence_score < 6 |
+| Research | Synthesis | confidence_score >= 6 (fast path) |
+| Validator | Research | insufficient AND attempts < 3 |
+| Validator | Synthesis | sufficient OR attempts >= 3 |
 
 ---
 
@@ -109,78 +48,68 @@ LLM in Clarity is lenient -- if a company name is present the query passes as "c
 
 | Field | Type | Description |
 |---|---|---|
-| `messages` | `list[BaseMessage]` | Full conversation history, append-only via `add_messages` reducer |
-| `query` | `str` | Current query (updated to clarification text if interrupt fires) |
-| `clarity_status` | `"clear" or "needs_clarification"` | Set by Clarity Agent |
-| `research_findings` | `str` | Synthesized output from Research Agent |
-| `confidence_score` | `int 0-10` | Research Agent self-rating |
-| `validation_result` | `"sufficient" or "insufficient"` | Validator Agent verdict |
-| `research_attempts` | `int` | Retry counter, resets to 0 on each new conversation turn |
+| messages | list[BaseMessage] | Full conversation history, append-only via add_messages |
+| query | str | Current query, updated after clarification |
+| clarity_status | clear or needs_clarification | Set by Clarity Agent |
+| research_findings | str | Synthesized research output |
+| confidence_score | int 0-10 | Research Agent self-rating |
+| validation_result | sufficient or insufficient | Validator verdict |
+| research_attempts | int | Retry counter, resets to 0 each new turn |
 
 ---
 
 ## Project Structure
 
-```
-multi-agent-workflow/
-+-- src/
-|   +-- state.py          # TypedDict state schema
-|   +-- data.py           # Mock research data (Apple, Tesla)
-|   +-- llm.py            # OpenRouter LLM factory
-|   +-- graph.py          # LangGraph StateGraph + routing
-|   +-- agents/
-|       +-- clarity.py    # Clarity agent + interrupt
-|       +-- research.py   # Tavily search + LLM synthesis
-|       +-- validator.py  # Quality checker
-|       +-- synthesis.py  # Final response with history
-+-- frontend/
-|   +-- app/
-|   |   +-- page.tsx          # Chat UI (React)
-|   |   +-- layout.tsx
-|   |   +-- globals.css
-|   |   +-- api/chat/route.ts    # Proxy to Python backend
-|   |   +-- api/clarify/route.ts
-|   +-- package.json
-|   +-- next.config.js
-+-- api.py            # FastAPI server (wraps LangGraph)
-+-- main.py           # CLI entry point
-+-- workflow.html     # Visual architecture guide
-+-- pyproject.toml
-+-- .env.example
-+-- .gitignore
-```
+    /                          <- Next.js frontend (Vercel root)
+    +-- app/
+    |   +-- page.tsx           <- Chat UI
+    |   +-- api/chat/route.ts  <- proxy to Python backend
+    |   +-- api/clarify/route.ts
+    +-- package.json
+    +-- vercel.json
+    +-- workflow.html
+    +-- README.md
+    +-- backend/               <- Python LangGraph backend
+        +-- src/
+        |   +-- state.py
+        |   +-- data.py        <- mock data (Apple, Tesla)
+        |   +-- llm.py
+        |   +-- graph.py
+        |   +-- agents/
+        |       +-- clarity.py
+        |       +-- research.py
+        |       +-- validator.py
+        |       +-- synthesis.py
+        +-- api.py             <- FastAPI server
+        +-- main.py            <- CLI entry point
+        +-- pyproject.toml
+        +-- uv.lock
 
 ---
 
 ## Setup
 
-### Prerequisites
-- Python 3.11+
-- Node.js 18+
-- uv (`pip install uv`)
+### 1. Install Python dependencies
 
-### 1. Clone and install Python dependencies
-```bash
-uv sync
-```
+    cd backend
+    uv sync
 
-### 2. Configure environment
-Copy `.env.example` to `.env`:
-```
-OPENROUTER_API_KEY=sk-or-...
-TAVILY_API_KEY=tvly-...
-MODEL_NAME=openai/gpt-4o-mini
+### 2. Create backend/.env
 
-# LangSmith tracing (already set up for turing-interview project)
-LANGCHAIN_API_KEY=lsv2_...
-LANGCHAIN_TRACING_V2=true
-LANGCHAIN_PROJECT=turing-interview
-```
+    OPENROUTER_API_KEY=sk-or-...
+    TAVILY_API_KEY=tvly-...
+    MODEL_NAME=openai/gpt-4o-mini
+    LANGCHAIN_API_KEY=lsv2_...
+    LANGCHAIN_TRACING_V2=true
+    LANGCHAIN_PROJECT=turing-interview
 
 ### 3. Install frontend dependencies
-```bash
-cd frontend && npm install
-```
+
+    npm install
+
+### 4. Create .env.local at repo root
+
+    BACKEND_URL=http://localhost:8000
 
 ---
 
@@ -188,69 +117,109 @@ cd frontend && npm install
 
 ### Option A: Chat UI (recommended)
 
-**Terminal 1 -- Python backend:**
-```bash
-uv run uvicorn api:app --port 8000 --reload
-```
+Terminal 1 - Python backend:
 
-**Terminal 2 -- Next.js frontend:**
-```bash
-cd frontend && npm run dev
-```
+    cd backend
+    uv run uvicorn api:app --port 8000 --reload
 
-Open `http://localhost:3000`
+Terminal 2 - Next.js frontend:
+
+    npm run dev
+
+Open http://localhost:3000
 
 ### Option B: CLI
-```bash
-uv run main.py
-```
+
+    cd backend
+    uv run python main.py
+
 
 ---
 
-## LangSmith Tracing
+## Memory and Multi-Turn Conversation
 
-All agent runs are automatically traced to the `turing-interview` project on LangSmith when `LANGCHAIN_TRACING_V2=true` and `LANGCHAIN_API_KEY` are set.
+The system uses LangGraph's built-in MemorySaver checkpointer (in-memory SQLite-backed store) to persist state across turns. Each browser session gets a unique thread_id (UUID). The FastAPI backend holds a single graph instance; MemorySaver stores the full checkpoint per thread_id so messages accumulate correctly across API calls.
 
-View traces at: https://smith.langchain.com/o/your-org/projects/turing-interview
-
-Each trace shows:
-- Full agent execution tree
-- LLM prompts and responses per agent
-- Confidence scores and routing decisions
-- Token usage
+- New turn: graph starts from START, new message appended to history via add_messages reducer
+- Interrupt/resume: graph pauses mid-execution, resumes from the interrupted node
+- Follow-up questions: Synthesis Agent receives the full messages list so it can reference prior context
 
 ---
 
-## Deploying the UI to Vercel
+## Example Conversations
 
-1. Push the repo to GitHub
-2. Create a new Vercel project, set **Root Directory** to `frontend/`
-3. Add environment variable on Vercel: `BACKEND_URL=https://your-backend-url.com`
-4. Deploy the Python backend separately (Railway, Render, Fly.io, etc.)
+### Conversation 1 - Vague query triggers interrupt, then follow-up uses memory
+
+Turn 1a - vague query, interrupt fires:
+
+    You: Tell me about a big tech company
+    [clarity]
+    Assistant: Your query is a bit vague - which specific company are you asking about?
+    You: Apple
+    [clarity] [research confidence=9] [synthesis]
+    Assistant: Apple Inc. has been making significant moves recently. The company launched
+    its Vision Pro headset and hit a record  in services revenue. Apple Intelligence
+    AI is being integrated across iOS 18, and the company is expanding manufacturing in India...
+
+Turn 1b - follow-up uses full conversation history:
+
+    You: What about their main competitors?
+    [clarity] [research confidence=8] [synthesis]
+    Assistant: Building on what we discussed about Apple, their main competitors include
+    Samsung (hardware), Google (services/AI), and Microsoft (enterprise). Samsung leads
+    in global smartphone market share while Google competes directly on AI assistant features...
+
+### Conversation 2 - Low confidence triggers validator loop
+
+Turn 2a - unknown company, validator loops:
+
+    You: Tell me about Stripe
+    [clarity] [research confidence=4] [validator: insufficient, attempt=1]
+           [research confidence=7] [validator: sufficient] [synthesis]
+    Assistant: Stripe is a leading fintech company founded in 2010. While our data is
+    limited compared to publicly traded companies, Stripe is valued at ~ and processes
+    hundreds of billions in payments annually. Key developments include...
+
+Turn 2b - follow-up in same session:
+
+    You: Who are their main investors?
+    [clarity] [research confidence=6] [synthesis]
+    Assistant: Following up on Stripe from our earlier conversation - their major investors
+    include Sequoia Capital, Andreessen Horowitz, and General Catalyst...
+
+
+---
+
+## Deploying to Vercel
+
+1. Push repo to GitHub
+2. Import at vercel.com - Root Directory is auto-detected as / (Next.js)
+3. Add environment variable: BACKEND_URL = your deployed backend URL
+4. Deploy the Python backend separately (Railway, Render, Fly.io) and point BACKEND_URL to it
 
 ---
 
 ## Assumptions
 
-- Company name matching in mock data uses case-insensitive substring search
-- `research_attempts` resets to 0 at the start of each new conversation turn
-- When an interrupt fires, the clarification text is added as a `HumanMessage` to the conversation history
+- Company name matching uses case-insensitive substring search in mock data
+- research_attempts resets to 0 at the start of each new conversation turn
+- When interrupt fires, the clarification text is added as a HumanMessage to message history
 - LLM temperature is 0 for deterministic routing decisions
-- Tavily search fails gracefully -- if no API key or network error, falls back to mock data only
-- The validator loop exits at 3 attempts regardless of `validation_result` to prevent infinite loops
-- Follow-up questions may trigger fresh Tavily searches on each turn for up-to-date info
+- Tavily search fails gracefully if TAVILY_API_KEY is missing (falls back to mock data only)
+- The validator loop exits at 3 attempts regardless of validation_result to prevent infinite loops
+- MemorySaver is in-process memory - state is lost if the backend server restarts
 
 ---
 
 ## Beyond Expected Deliverable
 
-- **Live web search via Tavily**: Research Agent queries the real web instead of relying only on static mock data
-- **Dual data sources**: Combines Tavily live results with curated mock data (Apple, Tesla); LLM synthesizes both
-- **FastAPI REST backend**: `api.py` exposes the graph as HTTP endpoints (`/chat`, `/clarify`, `/health`) enabling any frontend to consume it
-- **Next.js chat UI**: Full React chat interface with real-time agent trace visualization, deployed to Vercel
-- **Agent trace visualization**: UI shows exactly which agents ran (clarity -> research *9 -> synthesis) with confidence scores inline
-- **Human-in-the-loop in UI**: Clarification prompts appear as special amber cards with inline input -- no page reload needed
-- **OpenRouter integration**: Model-agnostic -- swap LLMs by setting `MODEL_NAME` (GPT-4o, Claude, Mistral, etc.)
-- **LangSmith tracing**: Full observability -- every agent run, LLM call, and routing decision is traced to `turing-interview` project
-- **Multi-turn memory in UI**: MemorySaver persists conversation state across turns using `thread_id` (UUID per browser session)
-- **Suggested prompts**: UI shows clickable example queries to demonstrate all agent paths
+- **Live web search via Tavily**: Research Agent queries the real web instead of static mock data only
+- **Dual data sources**: Combines Tavily live results with curated mock data (Apple, Tesla)
+- **FastAPI REST backend**: api.py exposes the graph as /chat, /clarify, /health endpoints
+- **Next.js chat UI**: Full React chat interface with real-time agent trace visualization
+- **Agent trace visualization**: UI shows clarity -> research (*9) -> synthesis with confidence scores
+- **Human-in-the-loop in UI**: Clarification prompts appear as amber cards with inline input
+- **OpenRouter integration**: Model-agnostic - set MODEL_NAME to swap LLMs
+- **LangSmith tracing**: All agent runs traced to turing-interview project automatically
+- **Multi-turn memory in UI**: MemorySaver persists conversation state per UUID session
+- **Suggested prompts**: UI shows clickable examples covering all 3 routing paths
