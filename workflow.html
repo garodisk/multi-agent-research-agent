@@ -328,6 +328,20 @@
 
 <main>
 
+  <!-- ═══════════════════ 0. LIVE DEMO ═══════════════════ -->
+  <section>
+    <div style="background:linear-gradient(135deg,#1e293b,#312e81);border:1px solid #4f46e5;border-radius:14px;padding:1.5rem 2rem;display:flex;flex-wrap:wrap;gap:1.25rem;align-items:center;justify-content:space-between;">
+      <div>
+        <h3 style="color:#f1f5f9;font-size:1.05rem;margin-bottom:0.35rem;">Try the deployed demo</h3>
+        <p style="color:#94a3b8;font-size:0.85rem;">Frontend on Vercel, backend on Render (free tier &mdash; first request may take ~30s cold-start).</p>
+      </div>
+      <div style="display:flex;gap:0.6rem;flex-wrap:wrap;">
+        <a href="https://multi-agent-research-agent-zh13-kappa.vercel.app" target="_blank" rel="noopener" style="background:#4f46e5;color:#fff;text-decoration:none;padding:0.65rem 1.2rem;border-radius:8px;font-size:0.85rem;font-weight:600;">Open Chat UI &rarr;</a>
+        <a href="https://github.com/garodisk/multi-agent-research-agent" target="_blank" rel="noopener" style="background:#1e293b;color:#e2e8f0;border:1px solid #475569;text-decoration:none;padding:0.65rem 1.2rem;border-radius:8px;font-size:0.85rem;font-weight:600;">GitHub Repo</a>
+      </div>
+    </div>
+  </section>
+
   <!-- ═══════════════════ 1. AGENT FLOW ═══════════════════ -->
   <section>
     <h2><span class="dot"></span>Agent Flow</h2>
@@ -746,33 +760,46 @@ flowchart TD
     <div class="run-cols">
 
       <div class="run-card cli">
-        <h3><span class="run-dot"></span>CLI</h3>
-        <pre><span class="cmt"># install deps and run interactive loop</span>
-<span class="cmd">uv run main.py</span>
+        <h3><span class="run-dot"></span>Run Locally (with your API keys)</h3>
+        <pre><span class="cmt"># 1. clone and install</span>
+<span class="cmd">git clone https://github.com/garodisk/multi-agent-research-agent.git</span>
+<span class="cmd">cd multi-agent-research-agent</span>
+<span class="cmd">cd backend &amp;&amp; uv sync &amp;&amp; cd ..</span>
+<span class="cmd">npm install</span>
 
-<span class="cmt"># set required env vars first</span>
-<span class="kw">OPENAI_API_KEY</span>=sk-...
-<span class="kw">TAVILY_API_KEY</span>=tvly-...
-<span class="kw">MODEL_NAME</span>=google/gemini-...</pre>
+<span class="cmt"># 2. create backend/.env</span>
+<span class="kw">OPENROUTER_API_KEY</span>=sk-or-...     <span class="cmt"># required</span>
+<span class="kw">TAVILY_API_KEY</span>=tvly-...          <span class="cmt"># optional</span>
+<span class="kw">MODEL_NAME</span>=openai/gpt-4o-mini
+
+<span class="cmt"># 3. create .env.local at repo root</span>
+<span class="kw">BACKEND_URL</span>=http://localhost:8000</pre>
         <p style="font-size:0.8rem;color:#475569;">
-          Runs a terminal-based multi-turn chat session directly
-          against the LangGraph workflow. No server required.
+          Get an OpenRouter key at <span class="url">openrouter.ai</span>
+          (also lets you use GPT-4o, Claude, Gemini, Llama, etc.).
+          Tavily is optional; without it the agent falls back to mock data only.
         </p>
       </div>
 
       <div class="run-card chat">
-        <h3><span class="run-dot"></span>Chat UI</h3>
-        <pre><span class="cmt"># 1. start the FastAPI backend</span>
-<span class="cmd">uvicorn api:app --reload</span>
+        <h3><span class="run-dot"></span>Start Both Services</h3>
+        <pre><span class="cmt"># terminal 1 &mdash; backend</span>
+<span class="cmd">cd backend</span>
+<span class="cmd">uv run uvicorn api:app --port 8000</span>
 
-<span class="cmt"># 2. start the Next.js frontend</span>
-<span class="cmd">cd frontend &amp;&amp; npm run dev</span>
+<span class="cmt"># terminal 2 &mdash; frontend</span>
+<span class="cmd">npm run dev</span>
 
-<span class="cmt"># open in browser</span>
-<span class="url">http://localhost:3000</span></pre>
+<span class="cmt"># open</span>
+<span class="url">http://localhost:3000</span>
+
+<span class="cmt"># optional: 5-turn regression test</span>
+<span class="cmd">cd backend</span>
+<span class="cmd">uv run python test_multiturn.py</span></pre>
         <p style="font-size:0.8rem;color:#475569;">
-          Backend streams SSE on <code>/chat</code>. Frontend polls for
-          interrupt events and re-prompts the user inline.
+          Or skip installation and try the deployed demo at the top of this page.
+          The regression script drives the graph through a scripted
+          Apple &rarr; Tesla conversation and asserts recency behavior.
         </p>
       </div>
 
