@@ -24,7 +24,8 @@ def validator_agent(state: State) -> dict:
         [HumanMessage(content=_PROMPT.format(query=query, findings=findings))]
     )
     verdict = response.content.strip().lower()
-    result = "sufficient" if "sufficient" in verdict else "insufficient"
+    # "insufficient" contains "sufficient" — check the negative case first
+    result = "insufficient" if verdict.startswith("insufficient") else "sufficient"
 
     return {
         "validation_result": result,
